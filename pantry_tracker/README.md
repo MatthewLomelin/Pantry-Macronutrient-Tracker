@@ -24,14 +24,5 @@ Open http://127.0.0.1:5000
   - Do **not** open `index.html` directly in the preview (that serves from the file system and the `/api/*` calls won’t work).
 - If you’re in Codespaces/remote, forward port **5000** and use the forwarded URL in Simple Browser.
 
-## Optional: CORS
-
-If you really want to open `index.html` as a file or with the Live Preview extension (different origin),
-enable CORS by uncommenting the lines in `app.py`:
-
-```python
-# from flask_cors import CORS
-# CORS(app)
-```
 
 But the recommended way is to visit `http://127.0.0.1:5000` so everything shares the same origin.

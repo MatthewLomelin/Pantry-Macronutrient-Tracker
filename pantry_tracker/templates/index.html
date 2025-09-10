@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Macro & Pantry Tracker</title>
+  <link rel="stylesheet" href="/static/styles.css"/>
+</head>
+<body>
+  <header>
+    <h1>Macro & Pantry Tracker</h1>
+    <p class="subtitle">Track your daily macros and manage pantry inventory with per‑unit nutrition.</p>
+  </header>
+
+  <main>
+    <section class="card">
+      <h2>Daily Macro Targets</h2>
+      <form id="targetsForm" class="grid-4">
+        <label>Calories<br><input type="number" step="1" id="tCalories" required></label>
+        <label>Protein (g)<br><input type="number" step="0.1" id="tProtein" required></label>
+        <label>Carbs (g)<br><input type="number" step="0.1" id="tCarbs" required></label>
+        <label>Fat (g)<br><input type="number" step="0.1" id="tFat" required></label>
+        <button class="primary" type="submit">Save Targets</button>
+      </form>
+      <div id="summary" class="summary"></div>
+    </section>
+
+    <section class="card">
+      <h2>Add Pantry Item</h2>
+      <form id="addPantryForm" class="grid-4">
+        <label>Name<br><input type="text" id="pName" placeholder="Chicken breast" required></label>
+        <label>Quantity<br><input type="number" id="pQty" step="0.01" placeholder="1000" required></label>
+        <label>Unit<br>
+          <select id="pUnit">
+            <option value="g">g</option>
+            <option value="ml">ml</option>
+            <option value="oz">oz</option>
+            <option value="serving">serving</option>
+          </select>
+        </label>
+        <div class="span-all help">
+          Enter macros <em>per unit</em>. Example: if per 100 g, set unit to "g" and enter values divided by 100, then consume the amount in grams.
+        </div>
+        <label>kcal / unit<br><input type="number" id="pCal" step="0.01" placeholder="1.65" required></label>
+        <label>Protein / unit (g)<br><input type="number" id="pProt" step="0.001" placeholder="0.31" required></label>
+        <label>Carbs / unit (g)<br><input type="number" id="pCarb" step="0.001" placeholder="0.00" required></label>
+        <label>Fat / unit (g)<br><input type="number" id="pFat" step="0.001" placeholder="0.036" required></label>
+        <button class="primary" type="submit">Add to Pantry</button>
+      </form>
+    </section>
+
+    <section class="card">
+      <div class="row-between">
+        <h2>Pantry</h2>
+        <button id="refreshPantry" class="secondary">Refresh</button>
+      </div>
+      <table id="pantryTable">
+        <thead>
+          <tr>
+            <th>Name</th>
+            <th>Qty</th>
+            <th>Unit</th>
+            <th>kcal/u</th>
+            <th>P/u</th>
+            <th>C/u</th>
+            <th>F/u</th>
+            <th>Consume</th>
+            <th>Delete</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </section>
+
+    <section class="card">
+      <div class="row-between">
+        <h2>Today's Log</h2>
+        <input type="date" id="logDate"/>
+      </div>
+      <div id="logSummary" class="summary"></div>
+      <table id="logTable">
+        <thead>
+          <tr>
+            <th>Time</th>
+            <th>Item</th>
+            <th>Qty</th>
+            <th>Unit</th>
+            <th>kcal</th>
+            <th>P</th>
+            <th>C</th>
+            <th>F</th>
+            <th>Note</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </section>
+  </main>
+
+  <footer>
+    <p>Local-only demo. Data is stored in <code>pantry.db</code> next to <code>app.py</code>.</p>
+  </footer>
+
+  <script>
+    const $ = (sel) => document.querySelector(sel);
+    const $$ = (sel) => document.querySelectorAll(sel);
+
+    async function getJSON(url) {
+      const res = await fetch(url);
+      if (!res.ok) throw new Error('Request failed');
+      return res.json();
+    }
+    async function postJSON(url, data) {
+      const res = await fetch(url, {method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(data)});
+      if (!res.ok) {
+        const e = await res.json().catch(()=>({error:res.statusText}));
+        throw new Error(e.error || 'Request failed');
+      }
+      return res.json();
+    }
+    async function putJSON(url, data) {
+      const res = await fetch(url, {method: 'PUT', headers: {'Content-Type':'application/json'}, body: JSON.stringify(data)});
+      if (!res.ok) {
+        const e = await res.json().catch(()=>({error:res.statusText}));
+        throw new Error(e.error || 'Request failed');
+      }
+      return res.json();
+    }
+    async function del(url) {
+      const res = await fetch(url, {method: 'DELETE'});
+      if (!res.ok) throw new Error('Delete failed');
+      return res.json();
+    }
+
+    function todayISO() {
+      const d = new Date();
+      const tz = d.getTimezoneOffset() * 60000;
+      return new Date(d - tz).toISOString().slice(0,10);
+    }
+
+    async function loadTargets() {
+      const t = await getJSON('/api/macros/targets');
+      $('#tCalories').value = t.calories;
+      $('#tProtein').value  = t.protein;
+      $('#tCarbs').value    = t.carbs;
+      $('#tFat').value      = t.fat;
+    }
+
+    async function loadSummary() {
+      const d = $('#logDate').value || todayISO();
+      const s = await getJSON('/api/macros/summary?date='+d);
+      const fmt = (x)=> Number(x).toFixed(1);
+      $('#summary').innerHTML = `
+        <div class="pill-group">
+          <span class="pill">Targets — kcal: ${fmt(s.targets.calories)} • P: ${fmt(s.targets.protein)} • C: ${fmt(s.targets.carbs)} • F: ${fmt(s.targets.fat)}</span>
+          <span class="pill">Consumed — kcal: ${fmt(s.consumed.calories)} • P: ${fmt(s.consumed.protein)} • C: ${fmt(s.consumed.carbs)} • F: ${fmt(s.consumed.fat)}</span>
+          <span class="pill accent">Remaining — kcal: ${fmt(s.remaining.calories)} • P: ${fmt(s.remaining.protein)} • C: ${fmt(s.remaining.carbs)} • F: ${fmt(s.remaining.fat)}</span>
+        </div>
+      `;
+      $('#logSummary').innerHTML = $('#summary').innerHTML;
+    }
+
+    async function loadPantry() {
+      const data = await getJSON('/api/pantry');
+      const tbody = $('#pantryTable tbody');
+      tbody.innerHTML = '';
+      data.forEach(item => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td>${item.name}</td>
+          <td>${Number(item.quantity).toFixed(2)}</td>
+          <td>${item.unit}</td>
+          <td>${Number(item.calories_per_unit).toFixed(3)}</td>
+          <td>${Number(item.protein_per_unit).toFixed(3)}</td>
+          <td>${Number(item.carbs_per_unit).toFixed(3)}</td>
+          <td>${Number(item.fat_per_unit).toFixed(3)}</td>
+          <td>
+            <div class="consume">
+              <input type="number" step="0.01" min="0" placeholder="qty" data-id="${item.id}" />
+              <button class="mini" data-action="consume" data-id="${item.id}">Consume</button>
+            </div>
+          </td>
+          <td><button class="danger mini" data-action="delete" data-id="${item.id}">✕</button></td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+
+    async function loadLogs() {
+      const d = $('#logDate').value || todayISO();
+      const data = await getJSON('/api/logs?date='+d);
+      const tbody = $('#logTable tbody');
+      tbody.innerHTML = '';
+      data.forEach(row => {
+        const t = new Date(row.created_at);
+        const time = t.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
+        const tr = document.createElement('tr');
+        const n = row.note ? row.note : '';
+        tr.innerHTML = `
+          <td>${time}</td>
+          <td>${row.item_name}</td>
+          <td>${Number(row.quantity).toFixed(2)}</td>
+          <td>${row.unit}</td>
+          <td>${Number(row.calories).toFixed(0)}</td>
+          <td>${Number(row.protein).toFixed(1)}</td>
+          <td>${Number(row.carbs).toFixed(1)}</td>
+          <td>${Number(row.fat).toFixed(1)}</td>
+          <td>${n}</td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+
+    // Event Listeners
+    $('#targetsForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const payload = {
+        calories: Number($('#tCalories').value || 0),
+        protein:  Number($('#tProtein').value || 0),
+        carbs:    Number($('#tCarbs').value || 0),
+        fat:      Number($('#tFat').value || 0),
+      };
+      await postJSON('/api/macros/targets', payload);
+      await loadSummary();
+    });
+
+    $('#addPantryForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const payload = {
+        name: $('#pName').value.trim(),
+        quantity: Number($('#pQty').value),
+        unit: $('#pUnit').value,
+        calories_per_unit: Number($('#pCal').value),
+        protein_per_unit:  Number($('#pProt').value),
+        carbs_per_unit:    Number($('#pCarb').value),
+        fat_per_unit:      Number($('#pFat').value),
+      };
+      await postJSON('/api/pantry', payload);
+      e.target.reset();
+      await loadPantry();
+    });
+
+    $('#pantryTable').addEventListener('click', async (e) => {
+      const btn = e.target.closest('button');
+      if (!btn) return;
+      const id = btn.getAttribute('data-id');
+      const action = btn.getAttribute('data-action');
+      if (action === 'delete') {
+        await del('/api/pantry/'+id);
+        await loadPantry();
+      } else if (action === 'consume') {
+        const input = document.querySelector(`input[data-id="${id}"]`);
+        const qty = Number(input.value);
+        if (!qty || qty <= 0) return alert('Enter a quantity to consume');
+        await postJSON('/api/consume', {item_id: Number(id), quantity: qty, note: ''});
+        input.value = '';
+        await Promise.all([loadPantry(), loadLogs(), loadSummary()]);
+      }
+    });
+
+    $('#refreshPantry').addEventListener('click', loadPantry);
+
+    $('#logDate').addEventListener('change', async () => {
+      await Promise.all([loadLogs(), loadSummary()]);
+    });
+
+    // Init
+    (async () => {
+      $('#logDate').value = todayISO();
+      await loadTargets();
+      await Promise.all([loadSummary(), loadPantry(), loadLogs()]);
+    })();
+  </script>
+</body>
+</html>

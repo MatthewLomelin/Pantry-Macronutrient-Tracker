@@ -1,0 +1,10 @@
+# Python venv
+.venv/
+__pycache__/
+*.pyc
+
+# SQLite DB
+*.db
+
+# VSCode settings
+.vscode/

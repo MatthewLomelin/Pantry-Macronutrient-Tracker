@@ -1,6 +1,6 @@
 # Macro & Pantry Tracker
 
-A tiny Flask + SQLite app to track pantry inventory and daily macros with a clean HTML/CSS UI.
+A Flask + SQLite app to track pantry inventory and daily macros with an HTML/CSS UI.
 
 ## Setup
 
